@@ -1,7 +1,8 @@
 import Image from "next/image";
-import { FirebaseCrud } from "@/components/firebase-crud";
+import { Page } from "@/components/HomePage";
+
 export default function Home() {
   return (
-    <FirebaseCrud />
+    <Page />
   );
 }
