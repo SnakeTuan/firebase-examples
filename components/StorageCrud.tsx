@@ -39,22 +39,36 @@ export function StorageCrud() {
     fetchUsers()
   }, [])
 
-  // Handle file selection
+  // For showing the image input after selecting it
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setSelectedFile(e.target.files[0])
     }
   }
 
-  // Upload avatar
+  // Upload image to firebase storage
   const uploadAvatar = async (userId: string) => {
-    if (!selectedFile) return
+    if (!selectedFile){
+      console.log('No file selected')
+      return
+    }
     setUploading(true)
-    const storageRef = ref(storage, `avatars/${userId}/${selectedFile.name}`)
-    await uploadBytes(storageRef, selectedFile)
-    const url = await getDownloadURL(storageRef)
-    const userRef = doc(db, 'users', userId)
-    await updateDoc(userRef, { avatarUrl: url })
+
+    try {
+      // Upload image to firebase storage
+      const storageRef = ref(storage, `users/${userId}/avatar.jpg`)
+      await uploadBytes(storageRef, selectedFile)
+
+      // Get the url of the image and update the user's avatarUrl
+      const url = await getDownloadURL(storageRef)
+      const userRef = doc(db, 'users', userId)
+      await updateDoc(userRef, { avatarUrl: url })
+  
+    } catch (error) {
+      console.error('Error uploading avatar:', error)
+    }
+    
+    setEditingUserId(null)
     setSelectedFile(null)
     setUploading(false)
     fetchUsers()
@@ -62,13 +76,57 @@ export function StorageCrud() {
 
   // Delete avatar
   const deleteAvatar = async (user: User) => {
-    if (!user.avatarUrl) return
+    if (!user.avatarUrl){
+      console.log('No avatar to delete')
+      return
+    }
     setUploading(true)
-    const storageRef = ref(storage, `avatars/${user.id}/${user.avatarUrl.split('/').pop()}`)
-    await deleteObject(storageRef)
-    const userRef = doc(db, 'users', user.id)
-    await updateDoc(userRef, { avatarUrl: null })
+
+    try {
+      // Delete the image from firebase storage
+      const avaPath = 'users/' + user.id + '/avatar.jpg'
+      const storageRef = ref(storage, avaPath)
+      await deleteObject(storageRef)
+
+      // Update the user's avatarUrl to null
+      const userRef = doc(db, 'users', user.id)
+      await updateDoc(userRef, { avatarUrl: null })
+
+    } catch (error) {
+      console.error('Error deleting avatar:', error)
+    }
+
     setUploading(false)
+    fetchUsers()
+  }
+
+  // Edit avatar: combine both upload and delete
+  const editAvatar = async (userId: string) => {
+    if (!selectedFile) return
+    setUploading(true)
+    try {
+      // Delete the current avatar if it exists
+      const user = users.find(u => u.id === userId) 
+      if (user && user.avatarUrl) {
+        const avatarPath = `users/${userId}/avatar.jpg`
+        const storageRef = ref(storage, avatarPath)
+        await deleteObject(storageRef)
+      }
+      
+      // Upload the new avatar
+      const storageRef = ref(storage, `users/${userId}/avatar.jpg`)
+      await uploadBytes(storageRef, selectedFile)
+      const url = await getDownloadURL(storageRef)
+      const userRef = doc(db, 'users', userId)
+      await updateDoc(userRef, { avatarUrl: url })
+
+    } catch (error) {
+      console.error("Error editing avatar:", error)
+    }
+
+    setUploading(false)
+    setSelectedFile(null)
+    setEditingUserId(null) // Close the modal after successful edit
     fetchUsers()
   }
 
@@ -142,7 +200,9 @@ export function StorageCrud() {
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
           <Card className="w-96 p-4">
             <CardContent>
-              <h2 className="text-xl mb-4">Upload Avatar</h2>
+              <h2 className="text-xl mb-4">
+                {users.find(u => u.id === editingUserId)?.avatarUrl ? 'Edit Avatar' : 'Upload Avatar'}
+              </h2>
               <Input type="file" accept="image/*" onChange={handleFileChange} />
               <div className="mt-4 flex justify-end">
                 <Button 
@@ -152,10 +212,16 @@ export function StorageCrud() {
                   Cancel
                 </Button>
                 <Button 
-                  onClick={() => uploadAvatar(editingUserId)}
+                  onClick={() => {
+                    if (users.find(u => u.id === editingUserId)?.avatarUrl) {
+                      editAvatar(editingUserId)
+                    } else {
+                      uploadAvatar(editingUserId)
+                    }
+                  }}
                   disabled={!selectedFile || uploading}
                 >
-                  {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload'}
+                  {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Submit'}
                 </Button>
               </div>
             </CardContent>
